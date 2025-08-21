@@ -1,0 +1,19 @@
+struct Foo {}
+
+struct Bar {
+    x: Foo,
+}
+
+enum Baz {
+    a: Foo,
+    b: Bar,
+}
+
+fn foo(x: Foo) -> Foo {
+    {}
+    let y = x
+    let w: Foo = match y {
+        let z => z,
+    }
+    w
+}
