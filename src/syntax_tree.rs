@@ -111,6 +111,12 @@ pub enum ExpressionKind {
         arms: Vec<MatchArm>,
         close_brace_token: Token,
     },
+    Call {
+        operand: Box<Expression>,
+        open_parenthesis_token: Token,
+        arguments: Vec<Expression>,
+        close_parenthesis_token: Token,
+    },
 }
 
 #[derive(Debug, Clone)]

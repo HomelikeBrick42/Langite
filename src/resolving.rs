@@ -544,6 +544,23 @@ fn resolve_expression(
                 kind: ast::ExpressionKind::Match { condition, arms },
             }
         }
+
+        st::ExpressionKind::Call {
+            operand,
+            open_parenthesis_token,
+            arguments,
+            close_parenthesis_token: _,
+        } => {
+            let operand = Box::new(resolve_expression(operand, output, names, variables)?);
+            let arguments = arguments
+                .iter()
+                .map(|argument| resolve_expression(argument, output, names, variables))
+                .collect::<Result<Vec<_>, ResolvingError>>()?;
+            ast::Expression {
+                location: open_parenthesis_token.location,
+                kind: ast::ExpressionKind::Call { operand, arguments },
+            }
+        }
     })
 }
 

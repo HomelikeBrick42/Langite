@@ -1,19 +1,13 @@
 struct Foo {}
+struct Bar {}
 
-struct Bar {
-    x: Foo,
-}
-
-enum Baz {
-    a: Foo,
-    b: Bar,
-}
-
-fn foo(x: Foo) -> Foo {
-    {}
-    let y = x
-    let w: Foo = match y {
-        let z => z,
+fn foo(T: Type) -> Type {
+    match T {
+        Foo => Bar,
+        _ => T,
     }
-    w
+}
+
+fn bar(const T: Type, x: T) -> foo(T) {
+    x
 }

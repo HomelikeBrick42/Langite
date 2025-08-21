@@ -331,6 +331,10 @@ pub fn parse_members(lexer: &mut Lexer<'_>) -> Result<(Token, Vec<Member>, Token
 }
 
 pub fn parse_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
+    parse_binary_expression(lexer)
+}
+
+pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
     Ok(match lexer.next_token()? {
         open_parenthesis_token @ Token {
             location,
@@ -449,6 +453,54 @@ pub fn parse_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingErro
             });
         }
     })
+}
+
+pub fn parse_binary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
+    let mut left = parse_primary_expression(lexer)?;
+
+    #[expect(clippy::while_let_loop)]
+    loop {
+        if let Some(open_parenthesis_token) = eat_token!(lexer, TokenKind::OpenParenthesis) {
+            let mut arguments = vec![];
+            loop {
+                while eat_token!(lexer, TokenKind::Newline).is_some() {}
+                if matches!(
+                    lexer.peek_token(),
+                    Ok(Token {
+                        kind: TokenKind::CloseParenthesis,
+                        ..
+                    })
+                ) {
+                    break;
+                }
+                arguments.push(parse_expression(lexer)?);
+                if matches!(
+                    lexer.peek_token(),
+                    Ok(Token {
+                        kind: TokenKind::CloseParenthesis,
+                        ..
+                    })
+                ) {
+                    break;
+                }
+                expect_token!(lexer, ",", TokenKind::Comma)?;
+            }
+            let close_parenthesis_token = expect_token!(lexer, ")", TokenKind::CloseParenthesis)?;
+            left = Expression {
+                location: open_parenthesis_token.location,
+                kind: ExpressionKind::Call {
+                    operand: Box::new(left),
+                    open_parenthesis_token,
+                    arguments,
+                    close_parenthesis_token,
+                },
+            };
+        } else {
+            break;
+        }
+    }
+
+    Ok(left)
 }
 
 pub fn parse_match_arm(lexer: &mut Lexer<'_>) -> Result<MatchArm, ParsingError> {

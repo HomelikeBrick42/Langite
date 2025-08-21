@@ -93,6 +93,10 @@ pub enum ExpressionKind {
         condition: Box<Expression>,
         arms: Vec<MatchArmExpression>,
     },
+    Call {
+        operand: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
 
 #[derive(Debug, Clone)]
