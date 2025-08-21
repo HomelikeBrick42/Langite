@@ -11,65 +11,15 @@ pub struct Item {
 
 #[derive(Debug, Clone)]
 pub enum ItemKind {
-    Struct {
-        struct_token: Token,
+    Const {
+        const_token: Token,
         name_token: Token,
         name: InternedStr,
-        inferred_parameters: Option<Box<InferredParameters>>,
-        open_brace_token: Token,
-        members: Vec<Member>,
-        close_brace_token: Token,
+        colon_token: Option<Token>,
+        type_: Option<Box<Expression>>,
+        equals_token: Token,
+        value: Box<Expression>,
     },
-    Enum {
-        enum_token: Token,
-        name_token: Token,
-        name: InternedStr,
-        inferred_parameters: Option<Box<InferredParameters>>,
-        open_brace_token: Token,
-        members: Vec<Member>,
-        close_brace_token: Token,
-    },
-    Function {
-        fn_token: Token,
-        name_token: Token,
-        name: InternedStr,
-        inferred_parameters: Option<Box<InferredParameters>>,
-        parameters: Box<Parameters>,
-        right_arrow_token: Token,
-        return_type: Box<Expression>,
-        body: Box<Expression>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct Member {
-    pub name_token: Token,
-    pub name: InternedStr,
-    pub colon_token: Token,
-    pub type_: Expression,
-}
-
-#[derive(Debug, Clone)]
-pub struct InferredParameters {
-    pub open_bracket_token: Token,
-    pub inferred_parameters: Vec<Parameter>,
-    pub close_bracket_token: Token,
-}
-
-#[derive(Debug, Clone)]
-pub struct Parameters {
-    pub open_parenthesis_token: Token,
-    pub parameters: Vec<Parameter>,
-    pub close_parenthesis_token: Token,
-}
-
-#[derive(Debug, Clone)]
-pub struct Parameter {
-    pub const_token: Option<Token>,
-    pub name_token: Token,
-    pub name: InternedStr,
-    pub colon_token: Token,
-    pub type_: Expression,
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +30,26 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
+    Struct {
+        struct_token: Token,
+        open_brace_token: Token,
+        members: Vec<Member>,
+        close_brace_token: Token,
+    },
+    Enum {
+        enum_token: Token,
+        open_brace_token: Token,
+        members: Vec<Member>,
+        close_brace_token: Token,
+    },
+    Function {
+        fn_token: Token,
+        inferred_parameters: Option<Box<InferredParameters>>,
+        parameters: Box<Parameters>,
+        right_arrow_token: Token,
+        return_type: Box<Expression>,
+        body: FunctionBody,
+    },
     ParenthesisedExpression {
         open_parenthesis_token: Token,
         expression: Box<Expression>,
@@ -117,6 +87,43 @@ pub enum ExpressionKind {
         arguments: Vec<Expression>,
         close_parenthesis_token: Token,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct Member {
+    pub name_token: Token,
+    pub name: InternedStr,
+    pub colon_token: Token,
+    pub type_: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionBody {
+    Type,
+    Defintion(Box<Expression>),
+}
+
+#[derive(Debug, Clone)]
+pub struct InferredParameters {
+    pub open_bracket_token: Token,
+    pub inferred_parameters: Vec<Parameter>,
+    pub close_bracket_token: Token,
+}
+
+#[derive(Debug, Clone)]
+pub struct Parameters {
+    pub open_parenthesis_token: Token,
+    pub parameters: Vec<Parameter>,
+    pub close_parenthesis_token: Token,
+}
+
+#[derive(Debug, Clone)]
+pub struct Parameter {
+    pub const_token: Option<Token>,
+    pub name_token: Token,
+    pub name: InternedStr,
+    pub colon_token: Token,
+    pub type_: Expression,
 }
 
 #[derive(Debug, Clone)]

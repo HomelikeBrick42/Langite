@@ -13,17 +13,6 @@ pub struct SourceLocation {
     pub column: NonZeroUsize,
 }
 
-impl SourceLocation {
-    pub fn builtin() -> Self {
-        Self {
-            filepath: "builtin symbol".into(),
-            position: 0,
-            line: NonZeroUsize::MIN,
-            column: NonZeroUsize::MIN,
-        }
-    }
-}
-
 #[derive(Debug, Display, Clone)]
 #[display("{kind}")]
 pub struct Token {

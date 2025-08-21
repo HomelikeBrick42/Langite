@@ -2,8 +2,8 @@ use crate::{
     interning::InternedStr,
     lexing::{Lexer, LexerErrorKind, LexingError, SourceLocation, Token, TokenKind},
     syntax_tree::{
-        Expression, ExpressionKind, InferredParameters, Item, ItemKind, MatchArm, Member,
-        Parameter, Parameters, Statement, StatementKind,
+        Expression, ExpressionKind, FunctionBody, InferredParameters, Item, ItemKind, MatchArm,
+        Member, Parameter, Parameters, Statement, StatementKind,
     },
 };
 use derive_more::Display;
@@ -79,111 +79,32 @@ pub fn parse_file(filepath: InternedStr, source: &str) -> Result<Vec<Item>, Pars
 
 pub fn parse_item(lexer: &mut Lexer<'_>) -> Result<Item, ParsingError> {
     Ok(match lexer.next_token()? {
-        struct_token @ Token {
+        const_token @ Token {
             location,
-            kind: TokenKind::StructKeyword,
+            kind: TokenKind::ConstKeyword,
         } => {
-            let (name_token, name) =
-                expect_token!(lexer, "struct name", TokenKind::Name(name), name)?;
-
-            let inferred_parameters =
-                if let Some(open_bracket_token) = eat_token!(lexer, TokenKind::OpenBracket) {
-                    Some(Box::new(parse_inferred_parameters(
-                        lexer,
-                        open_bracket_token,
-                    )?))
+            let (name_token, name) = expect_token!(lexer, "name", TokenKind::Name(name), name)?;
+            let (colon_token, type_) =
+                if let Some(colon_token) = eat_token!(lexer, TokenKind::Colon) {
+                    eat_token!(lexer, TokenKind::Newline);
+                    let type_ = Box::new(parse_expression(lexer)?);
+                    (Some(colon_token), Some(type_))
                 } else {
-                    None
+                    (None, None)
                 };
-
-            let (open_brace_token, members, close_brace_token) = parse_members(lexer)?;
-
-            Item {
-                location,
-                kind: ItemKind::Struct {
-                    struct_token,
-                    name_token,
-                    name,
-                    inferred_parameters,
-                    open_brace_token,
-                    members,
-                    close_brace_token,
-                },
-            }
-        }
-
-        enum_token @ Token {
-            location,
-            kind: TokenKind::EnumKeyword,
-        } => {
-            let (name_token, name) =
-                expect_token!(lexer, "enum name", TokenKind::Name(name), name)?;
-
-            let inferred_parameters =
-                if let Some(open_bracket_token) = eat_token!(lexer, TokenKind::OpenBracket) {
-                    Some(Box::new(parse_inferred_parameters(
-                        lexer,
-                        open_bracket_token,
-                    )?))
-                } else {
-                    None
-                };
-
-            let (open_brace_token, members, close_brace_token) = parse_members(lexer)?;
-
-            Item {
-                location,
-                kind: ItemKind::Enum {
-                    enum_token,
-                    name_token,
-                    name,
-                    inferred_parameters,
-                    open_brace_token,
-                    members,
-                    close_brace_token,
-                },
-            }
-        }
-
-        fn_token @ Token {
-            location,
-            kind: TokenKind::FnKeyword,
-        } => {
-            let (name_token, name) =
-                expect_token!(lexer, "function name", TokenKind::Name(name), name)?;
-
-            let inferred_parameters =
-                if let Some(open_bracket_token) = eat_token!(lexer, TokenKind::OpenBracket) {
-                    Some(Box::new(parse_inferred_parameters(
-                        lexer,
-                        open_bracket_token,
-                    )?))
-                } else {
-                    None
-                };
-
-            let open_parenthesis_token = expect_token!(lexer, "(", TokenKind::OpenParenthesis)?;
-            let parameters = Box::new(parse_parameters(lexer, open_parenthesis_token)?);
-
+            let equals_token = expect_token!(lexer, "=", TokenKind::Equals)?;
             eat_token!(lexer, TokenKind::Newline);
-            let right_arrow_token = expect_token!(lexer, "->", TokenKind::RightArrow)?;
-            eat_token!(lexer, TokenKind::Newline);
-            let return_type = Box::new(parse_expression(lexer)?);
-
-            let open_brace_token = expect_token!(lexer, "{", TokenKind::OpenBrace)?;
-            let body = Box::new(parse_block(lexer, open_brace_token)?);
-
+            let value = Box::new(parse_expression(lexer)?);
             Item {
                 location,
-                kind: ItemKind::Function {
-                    fn_token,
+                kind: ItemKind::Const {
+                    const_token,
                     name_token,
                     name,
-                    inferred_parameters,
-                    parameters,
-                    right_arrow_token,
-                    return_type,
-                    body,
+                    colon_token,
+                    type_,
+                    equals_token,
+                    value,
                 },
             }
         }
@@ -336,6 +257,81 @@ pub fn parse_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingErro
 
 pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
     Ok(match lexer.next_token()? {
+        struct_token @ Token {
+            location,
+            kind: TokenKind::StructKeyword,
+        } => {
+            let (open_brace_token, members, close_brace_token) = parse_members(lexer)?;
+
+            Expression {
+                location,
+                kind: ExpressionKind::Struct {
+                    struct_token,
+                    open_brace_token,
+                    members,
+                    close_brace_token,
+                },
+            }
+        }
+
+        enum_token @ Token {
+            location,
+            kind: TokenKind::EnumKeyword,
+        } => {
+            let (open_brace_token, members, close_brace_token) = parse_members(lexer)?;
+
+            Expression {
+                location,
+                kind: ExpressionKind::Enum {
+                    enum_token,
+                    open_brace_token,
+                    members,
+                    close_brace_token,
+                },
+            }
+        }
+
+        fn_token @ Token {
+            location,
+            kind: TokenKind::FnKeyword,
+        } => {
+            let inferred_parameters =
+                if let Some(open_bracket_token) = eat_token!(lexer, TokenKind::OpenBracket) {
+                    Some(Box::new(parse_inferred_parameters(
+                        lexer,
+                        open_bracket_token,
+                    )?))
+                } else {
+                    None
+                };
+
+            let open_parenthesis_token = expect_token!(lexer, "(", TokenKind::OpenParenthesis)?;
+            let parameters = Box::new(parse_parameters(lexer, open_parenthesis_token)?);
+
+            eat_token!(lexer, TokenKind::Newline);
+            let right_arrow_token = expect_token!(lexer, "->", TokenKind::RightArrow)?;
+            eat_token!(lexer, TokenKind::Newline);
+            let return_type = Box::new(parse_expression(lexer)?);
+
+            let body = if let Some(open_brace_token) = eat_token!(lexer, TokenKind::OpenBrace) {
+                FunctionBody::Defintion(Box::new(parse_block(lexer, open_brace_token)?))
+            } else {
+                FunctionBody::Type
+            };
+
+            Expression {
+                location,
+                kind: ExpressionKind::Function {
+                    fn_token,
+                    inferred_parameters,
+                    parameters,
+                    right_arrow_token,
+                    return_type,
+                    body,
+                },
+            }
+        }
+
         open_parenthesis_token @ Token {
             location,
             kind: TokenKind::OpenParenthesis,

@@ -32,7 +32,7 @@ pub enum ResolvingErrorKind {
 }
 
 pub struct ResolvingOutput {
-    pub types: SlotMap<ast::TypeId, ast::Type>,
+    pub consts: SlotMap<ast::ConstId, ast::Const>,
     pub functions: SlotMap<ast::FunctionId, ast::Function>,
 }
 
@@ -40,16 +40,12 @@ pub fn resolve_program(
     items: &[st::Item],
 ) -> Result<(ResolvingOutput, FxHashMap<InternedStr, ast::Name>), ResolvingError> {
     let mut output = ResolvingOutput {
-        types: SlotMap::with_key(),
+        consts: SlotMap::with_key(),
         functions: SlotMap::with_key(),
     };
     let mut names = FxHashMap::<InternedStr, ast::Name>::default();
 
-    let type_type = output.types.insert(ast::Type {
-        location: SourceLocation::builtin(),
-        kind: ast::TypeKind::Type,
-    });
-    names.insert("Type".into(), ast::Name::Type(type_type));
+    names.insert("Type".into(), ast::Name::Builtin(ast::Builtin::Type));
 
     resolve_items(items.iter(), &mut output, &mut names)?;
 
@@ -61,316 +57,66 @@ fn resolve_items<'a>(
     output: &mut ResolvingOutput,
     names: &mut FxHashMap<InternedStr, ast::Name>,
 ) -> Result<(), ResolvingError> {
-    let mut functions = Vec::<(ast::FunctionId, &st::Expression)>::new();
+    let mut consts = Vec::<(ast::ConstId, Option<&st::Expression>, &st::Expression)>::new();
 
     for item in items {
         match &item.kind {
-            st::ItemKind::Struct {
-                struct_token: _,
+            st::ItemKind::Const {
+                const_token: _,
                 name_token,
                 name,
-                inferred_parameters,
-                open_brace_token: _,
-                members,
-                close_brace_token: _,
+                colon_token: _,
+                type_,
+                equals_token: _,
+                value,
             } => {
-                let type_ = output.types.insert(ast::Type {
+                if names.contains_key(name) {
+                    return Err(ResolvingError {
+                        location: name_token.location,
+                        kind: ResolvingErrorKind::NameRedeclaration(*name),
+                    });
+                }
+
+                let id = output.consts.insert(ast::Const {
                     location: name_token.location,
-                    kind: ast::TypeKind::Unresolved,
-                });
-
-                if names.contains_key(name) {
-                    return Err(ResolvingError {
-                        location: name_token.location,
-                        kind: ResolvingErrorKind::NameRedeclaration(*name),
-                    });
-                }
-                names.insert(*name, ast::Name::Type(type_));
-
-                let mut names = names.clone();
-                names.retain(|_, name| match name {
-                    ast::Name::Type(_) => true,
-                    ast::Name::Function(_) => true,
-                    ast::Name::ImplicitParameter { index: _ } => false,
-                    ast::Name::Parameter { index: _ } => false,
-                    ast::Name::Variable(_) => false,
-                });
-
-                let inferred_parameters = if let Some(inferred_parameters) = inferred_parameters {
-                    inferred_parameters
-                        .inferred_parameters
-                        .iter()
-                        .enumerate()
-                        .map(|(index, inferred_parameter)| {
-                            let inferred_parameter =
-                                resolve_parameter(inferred_parameter, output, &names)?;
-                            if names.contains_key(&inferred_parameter.name) {
-                                return Err(ResolvingError {
-                                    location: inferred_parameter.location,
-                                    kind: ResolvingErrorKind::NameRedeclaration(
-                                        inferred_parameter.name,
-                                    ),
-                                });
-                            }
-                            names.insert(
-                                inferred_parameter.name,
-                                ast::Name::ImplicitParameter { index },
-                            );
-                            Ok(inferred_parameter)
-                        })
-                        .collect::<Result<Vec<_>, ResolvingError>>()?
-                } else {
-                    vec![]
-                };
-
-                let members = {
-                    let mut member_names = FxHashSet::default();
-                    members
-                        .iter()
-                        .map(|member| {
-                            let member = resolve_member(member, output, &names)?;
-                            if member_names.contains(&member.name) {
-                                return Err(ResolvingError {
-                                    location: member.location,
-                                    kind: ResolvingErrorKind::MemberRedeclaration(member.name),
-                                });
-                            }
-                            member_names.insert(member.name);
-                            Ok(member)
-                        })
-                        .collect::<Result<Vec<_>, ResolvingError>>()?
-                };
-
-                output.types[type_].kind = ast::TypeKind::Struct {
                     name: *name,
-                    inferred_parameters,
-                    members,
-                };
-            }
-
-            st::ItemKind::Enum {
-                enum_token: _,
-                name_token,
-                name,
-                inferred_parameters,
-                open_brace_token: _,
-                members,
-                close_brace_token: _,
-            } => {
-                let type_ = output.types.insert(ast::Type {
-                    location: name_token.location,
-                    kind: ast::TypeKind::Unresolved,
+                    type_: None,
+                    value: None,
                 });
 
-                if names.contains_key(name) {
-                    return Err(ResolvingError {
-                        location: name_token.location,
-                        kind: ResolvingErrorKind::NameRedeclaration(*name),
-                    });
-                }
-                names.insert(*name, ast::Name::Type(type_));
+                names.insert(*name, ast::Name::Const(id));
 
-                let mut names = names.clone();
-                names.retain(|_, name| match name {
-                    ast::Name::Type(_) => true,
-                    ast::Name::Function(_) => true,
-                    ast::Name::ImplicitParameter { index: _ } => false,
-                    ast::Name::Parameter { index: _ } => false,
-                    ast::Name::Variable(_) => false,
-                });
-
-                let inferred_parameters = if let Some(inferred_parameters) = inferred_parameters {
-                    inferred_parameters
-                        .inferred_parameters
-                        .iter()
-                        .enumerate()
-                        .map(|(index, inferred_parameter)| {
-                            let inferred_parameter =
-                                resolve_parameter(inferred_parameter, output, &names)?;
-                            if names.contains_key(&inferred_parameter.name) {
-                                return Err(ResolvingError {
-                                    location: inferred_parameter.location,
-                                    kind: ResolvingErrorKind::NameRedeclaration(
-                                        inferred_parameter.name,
-                                    ),
-                                });
-                            }
-                            names.insert(
-                                inferred_parameter.name,
-                                ast::Name::ImplicitParameter { index },
-                            );
-                            Ok(inferred_parameter)
-                        })
-                        .collect::<Result<Vec<_>, ResolvingError>>()?
-                } else {
-                    vec![]
-                };
-
-                let members = {
-                    let mut member_names = FxHashSet::default();
-                    members
-                        .iter()
-                        .map(|member| {
-                            let member = resolve_member(member, output, &names)?;
-                            if member_names.contains(&member.name) {
-                                return Err(ResolvingError {
-                                    location: member.location,
-                                    kind: ResolvingErrorKind::MemberRedeclaration(member.name),
-                                });
-                            }
-                            member_names.insert(member.name);
-                            Ok(member)
-                        })
-                        .collect::<Result<Vec<_>, ResolvingError>>()?
-                };
-
-                output.types[type_].kind = ast::TypeKind::Enum {
-                    name: *name,
-                    inferred_parameters,
-                    members,
-                };
-            }
-
-            st::ItemKind::Function {
-                fn_token: _,
-                name_token,
-                name,
-                inferred_parameters,
-                parameters,
-                right_arrow_token: _,
-                return_type,
-                body,
-            } => {
-                let function_id = {
-                    let mut names = names.clone();
-                    names.retain(|_, name| match name {
-                        ast::Name::Type(_) => true,
-                        ast::Name::Function(_) => true,
-                        ast::Name::ImplicitParameter { index: _ } => false,
-                        ast::Name::Parameter { index: _ } => false,
-                        ast::Name::Variable(_) => false,
-                    });
-
-                    let inferred_parameters = if let Some(inferred_parameters) = inferred_parameters
-                    {
-                        inferred_parameters
-                            .inferred_parameters
-                            .iter()
-                            .enumerate()
-                            .map(|(index, inferred_parameter)| {
-                                let inferred_parameter =
-                                    resolve_parameter(inferred_parameter, output, &names)?;
-                                if names.contains_key(&inferred_parameter.name) {
-                                    return Err(ResolvingError {
-                                        location: inferred_parameter.location,
-                                        kind: ResolvingErrorKind::NameRedeclaration(
-                                            inferred_parameter.name,
-                                        ),
-                                    });
-                                }
-                                names.insert(
-                                    inferred_parameter.name,
-                                    ast::Name::ImplicitParameter { index },
-                                );
-                                Ok(inferred_parameter)
-                            })
-                            .collect::<Result<Vec<_>, ResolvingError>>()?
-                    } else {
-                        vec![]
-                    };
-
-                    let parameters = parameters
-                        .parameters
-                        .iter()
-                        .enumerate()
-                        .map(|(index, parameter)| {
-                            let parameter = resolve_parameter(parameter, output, &names)?;
-                            if names.contains_key(&parameter.name) {
-                                return Err(ResolvingError {
-                                    location: parameter.location,
-                                    kind: ResolvingErrorKind::NameRedeclaration(parameter.name),
-                                });
-                            }
-                            names.insert(parameter.name, ast::Name::Parameter { index });
-                            Ok(parameter)
-                        })
-                        .collect::<Result<Vec<_>, ResolvingError>>()?;
-
-                    let return_type = {
-                        let mut variables = SlotMap::with_key();
-                        let return_type =
-                            resolve_expression(return_type, output, &names, &mut variables)?;
-                        Box::new(ast::EvalContext {
-                            variables,
-                            expression: return_type,
-                        })
-                    };
-
-                    output.functions.insert(ast::Function {
-                        location: name_token.location,
-                        name: *name,
-                        inferred_parameters,
-                        parameters,
-                        return_type,
-                        body: None,
-                    })
-                };
-
-                if names.contains_key(name) {
-                    return Err(ResolvingError {
-                        location: name_token.location,
-                        kind: ResolvingErrorKind::NameRedeclaration(*name),
-                    });
-                }
-                names.insert(*name, ast::Name::Function(function_id));
-
-                functions.push((function_id, body));
+                consts.push((id, type_.as_deref(), value));
             }
         }
     }
 
-    for (function_id, body) in functions {
+    for (const_id, type_, value) in consts {
         let mut names = names.clone();
         names.retain(|_, name| match name {
-            ast::Name::Type(_) => true,
-            ast::Name::Function(_) => true,
+            ast::Name::Builtin(_) => true,
+            ast::Name::Const(_) => true,
             ast::Name::ImplicitParameter { index: _ } => false,
             ast::Name::Parameter { index: _ } => false,
             ast::Name::Variable(_) => false,
         });
 
-        {
-            let function = &output.functions[function_id];
-            for (index, inferred_parameter) in function.inferred_parameters.iter().enumerate() {
-                if names.contains_key(&inferred_parameter.name) {
-                    return Err(ResolvingError {
-                        location: inferred_parameter.location,
-                        kind: ResolvingErrorKind::NameRedeclaration(inferred_parameter.name),
-                    });
-                }
-                names.insert(
-                    inferred_parameter.name,
-                    ast::Name::ImplicitParameter { index },
-                );
-            }
-
-            for (index, parameter) in function.parameters.iter().enumerate() {
-                if names.contains_key(&parameter.name) {
-                    return Err(ResolvingError {
-                        location: parameter.location,
-                        kind: ResolvingErrorKind::NameRedeclaration(parameter.name),
-                    });
-                }
-                names.insert(parameter.name, ast::Name::Parameter { index });
-            }
+        if let Some(type_) = type_ {
+            let mut variables = SlotMap::with_key();
+            let type_ = resolve_expression(type_, output, &names, &mut variables)?;
+            output.consts[const_id].type_ = Some(Box::new(ast::EvalContext {
+                variables,
+                expression: type_,
+            }));
         }
-
-        let mut variables = SlotMap::with_key();
-        let body = resolve_expression(body, output, &names, &mut variables)?;
-        output.functions[function_id].body = Some(Box::new(ast::EvalContext {
-            variables,
-            expression: body,
-        }));
+        {
+            let mut variables = SlotMap::with_key();
+            let value = resolve_expression(value, output, &names, &mut variables)?;
+            output.consts[const_id].value = Some(Box::new(ast::EvalContext {
+                variables,
+                expression: value,
+            }));
+        }
     }
 
     Ok(())
@@ -389,8 +135,8 @@ fn resolve_parameter(
 ) -> Result<ast::Parameter, ResolvingError> {
     let mut names = names.clone();
     names.retain(|_, name| match name {
-        ast::Name::Type(_) => true,
-        ast::Name::Function(_) => true,
+        ast::Name::Builtin(_) => true,
+        ast::Name::Const(_) => true,
         ast::Name::ImplicitParameter { index: _ } => true,
         ast::Name::Parameter { index: _ } => true,
         ast::Name::Variable(_) => false,
@@ -421,8 +167,8 @@ fn resolve_member(
 ) -> Result<ast::Member, ResolvingError> {
     let mut names = names.clone();
     names.retain(|_, name| match name {
-        ast::Name::Type(_) => true,
-        ast::Name::Function(_) => true,
+        ast::Name::Builtin(_) => true,
+        ast::Name::Const(_) => true,
         ast::Name::ImplicitParameter { index: _ } => true,
         ast::Name::Parameter { index: _ } => true,
         ast::Name::Variable(_) => false,
@@ -447,6 +193,187 @@ fn resolve_expression(
     variables: &mut SlotMap<ast::VariableId, ast::Variable>,
 ) -> Result<ast::Expression, ResolvingError> {
     Ok(match &expression.kind {
+        st::ExpressionKind::Struct {
+            struct_token,
+            open_brace_token: _,
+            members,
+            close_brace_token: _,
+        } => {
+            let mut names = names.clone();
+            names.retain(|_, name| match name {
+                ast::Name::Builtin(_) => true,
+                ast::Name::Const(_) => true,
+                ast::Name::ImplicitParameter { index: _ } => false,
+                ast::Name::Parameter { index: _ } => false,
+                ast::Name::Variable(_) => false,
+            });
+
+            let members = {
+                let mut member_names = FxHashSet::default();
+                members
+                    .iter()
+                    .map(|member| {
+                        let member = resolve_member(member, output, &names)?;
+                        if member_names.contains(&member.name) {
+                            return Err(ResolvingError {
+                                location: member.location,
+                                kind: ResolvingErrorKind::MemberRedeclaration(member.name),
+                            });
+                        }
+                        member_names.insert(member.name);
+                        Ok(member)
+                    })
+                    .collect::<Result<Vec<_>, ResolvingError>>()?
+            };
+
+            ast::Expression {
+                location: struct_token.location,
+                kind: ast::ExpressionKind::Struct { members },
+            }
+        }
+
+        st::ExpressionKind::Enum {
+            enum_token,
+            open_brace_token: _,
+            members,
+            close_brace_token: _,
+        } => {
+            let mut names = names.clone();
+            names.retain(|_, name| match name {
+                ast::Name::Builtin(_) => true,
+                ast::Name::Const(_) => true,
+                ast::Name::ImplicitParameter { index: _ } => false,
+                ast::Name::Parameter { index: _ } => false,
+                ast::Name::Variable(_) => false,
+            });
+
+            let members = {
+                let mut member_names = FxHashSet::default();
+                members
+                    .iter()
+                    .map(|member| {
+                        let member = resolve_member(member, output, &names)?;
+                        if member_names.contains(&member.name) {
+                            return Err(ResolvingError {
+                                location: member.location,
+                                kind: ResolvingErrorKind::MemberRedeclaration(member.name),
+                            });
+                        }
+                        member_names.insert(member.name);
+                        Ok(member)
+                    })
+                    .collect::<Result<Vec<_>, ResolvingError>>()?
+            };
+
+            ast::Expression {
+                location: enum_token.location,
+                kind: ast::ExpressionKind::Enum { members },
+            }
+        }
+
+        st::ExpressionKind::Function {
+            fn_token,
+            inferred_parameters,
+            parameters,
+            right_arrow_token: _,
+            return_type,
+            body,
+        } => {
+            let mut names = names.clone();
+            names.retain(|_, name| match name {
+                ast::Name::Builtin(_) => true,
+                ast::Name::Const(_) => true,
+                ast::Name::ImplicitParameter { index: _ } => false,
+                ast::Name::Parameter { index: _ } => false,
+                ast::Name::Variable(_) => false,
+            });
+
+            let inferred_parameters = if let Some(inferred_parameters) = inferred_parameters {
+                inferred_parameters
+                    .inferred_parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(index, inferred_parameter)| {
+                        let inferred_parameter =
+                            resolve_parameter(inferred_parameter, output, &names)?;
+                        if names.contains_key(&inferred_parameter.name) {
+                            return Err(ResolvingError {
+                                location: inferred_parameter.location,
+                                kind: ResolvingErrorKind::NameRedeclaration(
+                                    inferred_parameter.name,
+                                ),
+                            });
+                        }
+                        names.insert(
+                            inferred_parameter.name,
+                            ast::Name::ImplicitParameter { index },
+                        );
+                        Ok(inferred_parameter)
+                    })
+                    .collect::<Result<Vec<_>, ResolvingError>>()?
+            } else {
+                vec![]
+            };
+
+            let parameters = parameters
+                .parameters
+                .iter()
+                .enumerate()
+                .map(|(index, parameter)| {
+                    let parameter = resolve_parameter(parameter, output, &names)?;
+                    if names.contains_key(&parameter.name) {
+                        return Err(ResolvingError {
+                            location: parameter.location,
+                            kind: ResolvingErrorKind::NameRedeclaration(parameter.name),
+                        });
+                    }
+                    names.insert(parameter.name, ast::Name::Parameter { index });
+                    Ok(parameter)
+                })
+                .collect::<Result<Vec<_>, ResolvingError>>()?;
+
+            let return_type = {
+                let mut variables = SlotMap::with_key();
+                let return_type = resolve_expression(return_type, output, &names, &mut variables)?;
+                Box::new(ast::EvalContext {
+                    variables,
+                    expression: return_type,
+                })
+            };
+
+            ast::Expression {
+                location: fn_token.location,
+                kind: match body {
+                    st::FunctionBody::Type => ast::ExpressionKind::FunctionType {
+                        inferred_parameters,
+                        parameters,
+                        return_type,
+                    },
+
+                    st::FunctionBody::Defintion(body) => {
+                        let body = {
+                            let mut variables = SlotMap::with_key();
+                            let body = resolve_expression(body, output, &names, &mut variables)?;
+                            Box::new(ast::EvalContext {
+                                variables,
+                                expression: body,
+                            })
+                        };
+
+                        let id = output.functions.insert(ast::Function {
+                            location: fn_token.location,
+                            inferred_parameters,
+                            parameters,
+                            return_type,
+                            body,
+                        });
+
+                        ast::ExpressionKind::Function(id)
+                    }
+                },
+            }
+        }
+
         st::ExpressionKind::ParenthesisedExpression {
             open_parenthesis_token: _,
             expression,
@@ -722,8 +649,8 @@ fn resolve_pattern(
                 .map(|type_| {
                     let mut names = names.clone();
                     names.retain(|_, name| match name {
-                        ast::Name::Type(_) => true,
-                        ast::Name::Function(_) => true,
+                        ast::Name::Builtin(_) => true,
+                        ast::Name::Const(_) => true,
                         ast::Name::ImplicitParameter { index: _ } => true,
                         ast::Name::Parameter { index: _ } => true,
                         ast::Name::Variable(_) => false,

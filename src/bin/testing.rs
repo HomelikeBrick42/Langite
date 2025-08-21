@@ -14,7 +14,7 @@ fn main() {
     });
     drop(items);
 
-    println!("{:#?}", resolved.types);
+    println!("{:#?}", resolved.consts);
     println!("{:#?}", resolved.functions);
     println!("{names:#?}");
 }

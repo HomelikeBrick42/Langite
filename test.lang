@@ -1,20 +1,20 @@
-struct True {}
-struct False {}
-enum Bool {
+const True: Type = struct {}
+const False = struct {}
+const Bool = enum {
     true: True,
     false: False,
 }
 
-struct Foo {}
-struct Bar {}
+const Foo = struct {}
+const Bar = struct {}
 
-fn foo(T: Type) -> Type {
+const foo: fn(T: Type) -> Type = fn(T: Type) -> Type {
     match T {
         Foo => Bar,
         _ => T,
     }
 }
 
-fn bar(const T: Type, x: T) -> foo(T) {
+const bar = fn[const T: Type](x: T) -> foo(T) {
     x
 }

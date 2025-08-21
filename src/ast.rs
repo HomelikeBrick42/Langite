@@ -1,46 +1,16 @@
+use crate::{interning::InternedStr, lexing::SourceLocation};
 use slotmap::{SlotMap, new_key_type};
 
-use crate::{interning::InternedStr, lexing::SourceLocation};
-
 new_key_type! {
-    pub struct TypeId;
+    pub struct ConstId;
 }
 
 #[derive(Debug, Clone)]
-pub struct Type {
-    pub location: SourceLocation,
-    pub kind: TypeKind,
-}
-
-#[derive(Debug, Clone)]
-pub enum TypeKind {
-    Unresolved,
-    Type,
-    Struct {
-        name: InternedStr,
-        inferred_parameters: Vec<Parameter>,
-        members: Vec<Member>,
-    },
-    Enum {
-        name: InternedStr,
-        inferred_parameters: Vec<Parameter>,
-        members: Vec<Member>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct Member {
+pub struct Const {
     pub location: SourceLocation,
     pub name: InternedStr,
-    pub type_: Box<EvalContext>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Parameter {
-    pub location: SourceLocation,
-    pub const_: bool,
-    pub name: InternedStr,
-    pub type_: Box<EvalContext>,
+    pub type_: Option<Box<EvalContext>>,
+    pub value: Option<Box<EvalContext>>,
 }
 
 new_key_type! {
@@ -50,11 +20,10 @@ new_key_type! {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub location: SourceLocation,
-    pub name: InternedStr,
     pub inferred_parameters: Vec<Parameter>,
     pub parameters: Vec<Parameter>,
     pub return_type: Box<EvalContext>,
-    pub body: Option<Box<EvalContext>>,
+    pub body: Box<EvalContext>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +51,18 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
+    Struct {
+        members: Vec<Member>,
+    },
+    Enum {
+        members: Vec<Member>,
+    },
+    Function(FunctionId),
+    FunctionType {
+        inferred_parameters: Vec<Parameter>,
+        parameters: Vec<Parameter>,
+        return_type: Box<EvalContext>,
+    },
     Name(Name),
     Block {
         statements: Vec<Statement>,
@@ -95,6 +76,21 @@ pub enum ExpressionKind {
         operand: Box<Expression>,
         arguments: Vec<Expression>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct Member {
+    pub location: SourceLocation,
+    pub name: InternedStr,
+    pub type_: Box<EvalContext>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Parameter {
+    pub location: SourceLocation,
+    pub const_: bool,
+    pub name: InternedStr,
+    pub type_: Box<EvalContext>,
 }
 
 #[derive(Debug, Clone)]
@@ -144,9 +140,14 @@ pub enum PatternKind {
 }
 
 #[derive(Debug, Clone)]
+pub enum Builtin {
+    Type,
+}
+
+#[derive(Debug, Clone)]
 pub enum Name {
-    Type(TypeId),
-    Function(FunctionId),
+    Builtin(Builtin),
+    Const(ConstId),
     ImplicitParameter { index: usize },
     Parameter { index: usize },
     Variable(VariableId),
