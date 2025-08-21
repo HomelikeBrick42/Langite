@@ -306,12 +306,8 @@ fn resolve_items<'a>(
                         })
                     };
 
-                    output.functions.insert_with_key(|id| ast::Function {
+                    output.functions.insert(ast::Function {
                         location: name_token.location,
-                        type_: output.types.insert(ast::Type {
-                            location: name_token.location,
-                            kind: ast::TypeKind::Function(id),
-                        }),
                         name: *name,
                         inferred_parameters,
                         parameters,
@@ -391,8 +387,17 @@ fn resolve_parameter(
     output: &mut ResolvingOutput,
     names: &FxHashMap<InternedStr, ast::Name>,
 ) -> Result<ast::Parameter, ResolvingError> {
+    let mut names = names.clone();
+    names.retain(|_, name| match name {
+        ast::Name::Type(_) => true,
+        ast::Name::Function(_) => true,
+        ast::Name::ImplicitParameter { index: _ } => true,
+        ast::Name::Parameter { index: _ } => true,
+        ast::Name::Variable(_) => false,
+    });
+
     let mut variables = SlotMap::with_key();
-    let type_ = resolve_expression(type_, output, names, &mut variables)?;
+    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
     Ok(ast::Parameter {
         location: name_token.location,
         const_: const_token.is_some(),
@@ -414,8 +419,17 @@ fn resolve_member(
     output: &mut ResolvingOutput,
     names: &FxHashMap<InternedStr, ast::Name>,
 ) -> Result<ast::Member, ResolvingError> {
+    let mut names = names.clone();
+    names.retain(|_, name| match name {
+        ast::Name::Type(_) => true,
+        ast::Name::Function(_) => true,
+        ast::Name::ImplicitParameter { index: _ } => true,
+        ast::Name::Parameter { index: _ } => true,
+        ast::Name::Variable(_) => false,
+    });
+
     let mut variables = SlotMap::with_key();
-    let type_ = resolve_expression(type_, output, names, &mut variables)?;
+    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
     Ok(ast::Member {
         location: name_token.location,
         name: *name,

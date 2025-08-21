@@ -26,7 +26,6 @@ pub enum TypeKind {
         inferred_parameters: Vec<Parameter>,
         members: Vec<Member>,
     },
-    Function(FunctionId),
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +50,6 @@ new_key_type! {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub location: SourceLocation,
-    pub type_: TypeId,
     pub name: InternedStr,
     pub inferred_parameters: Vec<Parameter>,
     pub parameters: Vec<Parameter>,

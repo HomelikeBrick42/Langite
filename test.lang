@@ -1,3 +1,10 @@
+struct True {}
+struct False {}
+enum Bool {
+    true: True,
+    false: False,
+}
+
 struct Foo {}
 struct Bar {}
 
