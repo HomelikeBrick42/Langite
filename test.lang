@@ -15,6 +15,6 @@ const foo: fn(T: Type) -> Type = fn(T: Type) -> Type {
     }
 }
 
-const bar = fn[const T: Type](x: T) -> foo(T) {
-    x
+const bar = fn(const T: Type, const U: Type, f: fn(x: T) -> U, x: T) -> U {
+    f(x)
 }

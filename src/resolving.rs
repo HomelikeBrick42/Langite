@@ -268,13 +268,20 @@ fn resolve_expression(
             body,
         } => {
             let mut names = names.clone();
-            names.retain(|_, name| match name {
-                ast::Name::Builtin(_) => true,
-                ast::Name::Const(_) => true,
-                ast::Name::ImplicitParameter { index: _ } => false,
-                ast::Name::Parameter { index: _ } => false,
-                ast::Name::Variable(_) => false,
-            });
+
+            match body {
+                st::FunctionBody::Type => {}
+
+                st::FunctionBody::Defintion(_) => {
+                    names.retain(|_, name| match name {
+                        ast::Name::Builtin(_) => true,
+                        ast::Name::Const(_) => true,
+                        ast::Name::ImplicitParameter { index: _ } => false,
+                        ast::Name::Parameter { index: _ } => false,
+                        ast::Name::Variable(_) => false,
+                    });
+                }
+            }
 
             let inferred_parameters = if let Some(inferred_parameters) = inferred_parameters {
                 inferred_parameters
@@ -320,14 +327,7 @@ fn resolve_expression(
                 })
                 .collect::<Result<Vec<_>, ResolvingError>>()?;
 
-            let return_type = {
-                let mut variables = SlotMap::with_key();
-                let return_type = resolve_expression(return_type, output, &names, &mut variables)?;
-                Box::new(ast::EvalContext {
-                    variables,
-                    expression: return_type,
-                })
-            };
+            let return_type = resolve_type_annotation(return_type, output, &names)?;
 
             ast::Expression {
                 location: fn_token.location,
