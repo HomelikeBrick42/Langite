@@ -243,6 +243,13 @@ fn resolve_items<'a>(
             } => {
                 let function_id = {
                     let mut names = names.clone();
+                    names.retain(|_, name| match name {
+                        ast::Name::Type(_) => true,
+                        ast::Name::Function(_) => true,
+                        ast::Name::ImplicitParameter { index: _ } => false,
+                        ast::Name::Parameter { index: _ } => false,
+                        ast::Name::Variable(_) => false,
+                    });
 
                     let inferred_parameters = if let Some(inferred_parameters) = inferred_parameters
                     {
@@ -328,6 +335,13 @@ fn resolve_items<'a>(
 
     for (function_id, body) in functions {
         let mut names = names.clone();
+        names.retain(|_, name| match name {
+            ast::Name::Type(_) => true,
+            ast::Name::Function(_) => true,
+            ast::Name::ImplicitParameter { index: _ } => false,
+            ast::Name::Parameter { index: _ } => false,
+            ast::Name::Variable(_) => false,
+        });
 
         {
             let function = &output.functions[function_id];
