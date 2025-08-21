@@ -675,8 +675,17 @@ fn resolve_pattern(
             let type_ = type_
                 .as_ref()
                 .map(|type_| {
+                    let mut names = names.clone();
+                    names.retain(|_, name| match name {
+                        ast::Name::Type(_) => true,
+                        ast::Name::Function(_) => true,
+                        ast::Name::ImplicitParameter { index: _ } => true,
+                        ast::Name::Parameter { index: _ } => true,
+                        ast::Name::Variable(_) => false,
+                    });
+
                     let mut variables = SlotMap::with_key();
-                    let type_ = resolve_expression(type_, output, names, &mut variables)?;
+                    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
                     Ok(Box::new(ast::EvalContext {
                         variables,
                         expression: type_,
