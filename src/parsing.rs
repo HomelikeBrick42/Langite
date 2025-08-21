@@ -553,7 +553,7 @@ pub fn parse_block(
 
 pub fn parse_statement(lexer: &mut Lexer<'_>) -> Result<Statement, ParsingError> {
     Ok(match lexer.peek_token()?.kind {
-        TokenKind::StructKeyword | TokenKind::EnumKeyword | TokenKind::FnKeyword => {
+        TokenKind::ConstKeyword => {
             let item = Box::new(parse_item(lexer)?);
             Statement {
                 location: item.location,
