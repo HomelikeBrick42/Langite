@@ -102,12 +102,7 @@ fn resolve_items<'a>(
         });
 
         if let Some(type_) = type_ {
-            let mut variables = SlotMap::with_key();
-            let type_ = resolve_expression(type_, output, &names, &mut variables)?;
-            output.consts[const_id].type_ = Some(Box::new(ast::EvalContext {
-                variables,
-                expression: type_,
-            }));
+            output.consts[const_id].type_ = Some(resolve_type_annotation(type_, output, &names)?);
         }
         {
             let mut variables = SlotMap::with_key();
@@ -122,6 +117,27 @@ fn resolve_items<'a>(
     Ok(())
 }
 
+fn resolve_type_annotation(
+    type_: &st::Expression,
+    output: &mut ResolvingOutput,
+    names: &FxHashMap<InternedStr, ast::Name>,
+) -> Result<Box<ast::EvalContext>, ResolvingError> {
+    let mut names = names.clone();
+    names.retain(|_, name| match name {
+        ast::Name::Builtin(_) => true,
+        ast::Name::Const(_) => true,
+        ast::Name::ImplicitParameter { index: _ } => true,
+        ast::Name::Parameter { index: _ } => true,
+        ast::Name::Variable(_) => false,
+    });
+    let mut variables = SlotMap::with_key();
+    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
+    Ok(Box::new(ast::EvalContext {
+        variables,
+        expression: type_,
+    }))
+}
+
 fn resolve_parameter(
     st::Parameter {
         const_token,
@@ -133,25 +149,11 @@ fn resolve_parameter(
     output: &mut ResolvingOutput,
     names: &FxHashMap<InternedStr, ast::Name>,
 ) -> Result<ast::Parameter, ResolvingError> {
-    let mut names = names.clone();
-    names.retain(|_, name| match name {
-        ast::Name::Builtin(_) => true,
-        ast::Name::Const(_) => true,
-        ast::Name::ImplicitParameter { index: _ } => true,
-        ast::Name::Parameter { index: _ } => true,
-        ast::Name::Variable(_) => false,
-    });
-
-    let mut variables = SlotMap::with_key();
-    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
     Ok(ast::Parameter {
         location: name_token.location,
         const_: const_token.is_some(),
         name: *name,
-        type_: Box::new(ast::EvalContext {
-            variables,
-            expression: type_,
-        }),
+        type_: resolve_type_annotation(type_, output, names)?,
     })
 }
 
@@ -165,24 +167,10 @@ fn resolve_member(
     output: &mut ResolvingOutput,
     names: &FxHashMap<InternedStr, ast::Name>,
 ) -> Result<ast::Member, ResolvingError> {
-    let mut names = names.clone();
-    names.retain(|_, name| match name {
-        ast::Name::Builtin(_) => true,
-        ast::Name::Const(_) => true,
-        ast::Name::ImplicitParameter { index: _ } => true,
-        ast::Name::Parameter { index: _ } => true,
-        ast::Name::Variable(_) => false,
-    });
-
-    let mut variables = SlotMap::with_key();
-    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
     Ok(ast::Member {
         location: name_token.location,
         name: *name,
-        type_: Box::new(ast::EvalContext {
-            variables,
-            expression: type_,
-        }),
+        type_: resolve_type_annotation(type_, output, names)?,
     })
 }
 
@@ -203,8 +191,8 @@ fn resolve_expression(
             names.retain(|_, name| match name {
                 ast::Name::Builtin(_) => true,
                 ast::Name::Const(_) => true,
-                ast::Name::ImplicitParameter { index: _ } => false,
-                ast::Name::Parameter { index: _ } => false,
+                ast::Name::ImplicitParameter { index: _ } => true,
+                ast::Name::Parameter { index: _ } => true,
                 ast::Name::Variable(_) => false,
             });
 
@@ -242,8 +230,8 @@ fn resolve_expression(
             names.retain(|_, name| match name {
                 ast::Name::Builtin(_) => true,
                 ast::Name::Const(_) => true,
-                ast::Name::ImplicitParameter { index: _ } => false,
-                ast::Name::Parameter { index: _ } => false,
+                ast::Name::ImplicitParameter { index: _ } => true,
+                ast::Name::Parameter { index: _ } => true,
                 ast::Name::Variable(_) => false,
             });
 
@@ -646,23 +634,7 @@ fn resolve_pattern(
         } => {
             let type_ = type_
                 .as_ref()
-                .map(|type_| {
-                    let mut names = names.clone();
-                    names.retain(|_, name| match name {
-                        ast::Name::Builtin(_) => true,
-                        ast::Name::Const(_) => true,
-                        ast::Name::ImplicitParameter { index: _ } => true,
-                        ast::Name::Parameter { index: _ } => true,
-                        ast::Name::Variable(_) => false,
-                    });
-
-                    let mut variables = SlotMap::with_key();
-                    let type_ = resolve_expression(type_, output, &names, &mut variables)?;
-                    Ok(Box::new(ast::EvalContext {
-                        variables,
-                        expression: type_,
-                    }))
-                })
+                .map(|type_| resolve_type_annotation(type_, output, names))
                 .transpose()?;
             let variable_id = variables.insert(ast::Variable {
                 location: name_token.location,
