@@ -8,6 +8,7 @@ const Bool = enum {
 const Foo = struct {}
 const Bar = struct {}
 
+// type annotation is optional
 const foo: fn(T: Type) -> Type = fn(T: Type) -> Type {
     match T {
         Foo => Bar,

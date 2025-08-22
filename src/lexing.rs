@@ -46,10 +46,16 @@ pub enum TokenKind {
     Equals,
     #[display("=>")]
     FatRightArrow,
+    #[display("+")]
+    Plus,
     #[display("-")]
     Minus,
     #[display("->")]
     RightArrow,
+    #[display("*")]
+    Asterisk,
+    #[display("/")]
+    Slash,
 
     #[display("{_0}")]
     Name(InternedStr),
@@ -88,6 +94,8 @@ pub enum LexerErrorKind {
     UnexpectedEOF,
     #[display("Unexpected character {_0:?}")]
     UnexpectedChar(char),
+    #[display("Unclosed multiline comment")]
+    UnclosedMultilineComment,
 }
 
 impl<'source> Lexer<'source> {
@@ -169,6 +177,7 @@ impl<'source> Lexer<'source> {
                             TokenKind::Equals
                         }
                     }
+                    '+' => TokenKind::Plus,
                     '-' => {
                         if let Some('>') = self.peek_char() {
                             self.next_char();
@@ -177,6 +186,49 @@ impl<'source> Lexer<'source> {
                             TokenKind::Minus
                         }
                     }
+                    '*' => TokenKind::Asterisk,
+                    '/' => match self.peek_char() {
+                        // single line comment
+                        Some('/') => {
+                            while let Some(c) = self.peek_char()
+                                && c != '\n'
+                            {
+                                self.next_char();
+                            }
+                            continue;
+                        }
+
+                        // multi line comment
+                        Some('*') => {
+                            let mut depth = 1usize;
+                            while depth > 0
+                                && let Some(c) = self.next_char()
+                            {
+                                match (c, self.peek_char()) {
+                                    ('/', Some('*')) => {
+                                        self.next_char();
+                                        depth += 1;
+                                    }
+
+                                    ('*', Some('/')) => {
+                                        self.next_char();
+                                        depth -= 1;
+                                    }
+
+                                    _ => {}
+                                }
+                            }
+                            if depth > 0 {
+                                return Err(LexingError {
+                                    location: start_location,
+                                    kind: LexerErrorKind::UnclosedMultilineComment,
+                                });
+                            }
+                            continue;
+                        }
+
+                        _ => TokenKind::Slash,
+                    },
 
                     // identifiers
                     'A'..='Z' | 'a'..='z' | '_' => {
