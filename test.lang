@@ -1,9 +1,11 @@
-const Bool = distinct enum {
-    true: distinct struct {},
-    false: distinct struct {},
+const Unit = distinct struct {}
+
+const Bool = enum {
+    true: Unit,
+    false: Unit,
 }
 
-const Foo = distinct struct {}
+const Foo = distinct Unit
 const Bar = distinct struct {
     a: type_of(Foo), // should be `Type`
 }
