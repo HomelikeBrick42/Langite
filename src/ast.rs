@@ -22,8 +22,18 @@ pub struct Function {
     pub location: SourceLocation,
     pub inferred_parameters: Vec<Parameter>,
     pub parameters: Vec<Parameter>,
-    pub return_type: Box<EvalContext>,
-    pub body: Box<EvalContext>,
+    pub body: FunctionBody,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionBody {
+    Defintion {
+        return_type: Box<EvalContext>,
+        body: Box<EvalContext>,
+    },
+    NakedDefintion {
+        body: Box<EvalContext>,
+    },
 }
 
 #[derive(Debug, Clone)]

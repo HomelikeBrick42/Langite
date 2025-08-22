@@ -8,8 +8,7 @@ const Bar = distinct struct {
     a: type_of(Foo), // should be `Type`
 }
 
-// type annotation is optional
-const foo: fn(T: Type) -> Type = fn(T: Type) -> Type {
+const foo = fn(T: Type) => {
     match T {
         Foo => Bar,
         _ => T,

@@ -47,7 +47,7 @@ pub enum ExpressionKind {
         inferred_parameters: Option<Box<InferredParameters>>,
         parameters: Box<Parameters>,
         right_arrow_token: Token,
-        return_type: Box<Expression>,
+        return_type: Option<Box<Expression>>,
         body: FunctionBody,
     },
     ParenthesisedExpression {
@@ -119,6 +119,7 @@ pub struct Member {
 pub enum FunctionBody {
     Type,
     Defintion(Box<Expression>),
+    NakedDefintion(Box<Expression>),
 }
 
 #[derive(Debug, Clone)]

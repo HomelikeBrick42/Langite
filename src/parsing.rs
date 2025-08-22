@@ -309,14 +309,29 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
             let parameters = Box::new(parse_parameters(lexer, open_parenthesis_token)?);
 
             eat_token!(lexer, TokenKind::Newline);
-            let right_arrow_token = expect_token!(lexer, "->", TokenKind::RightArrow)?;
-            eat_token!(lexer, TokenKind::Newline);
-            let return_type = Box::new(parse_expression(lexer)?);
 
-            let body = if let Some(open_brace_token) = eat_token!(lexer, TokenKind::OpenBrace) {
-                FunctionBody::Defintion(Box::new(parse_block(lexer, open_brace_token)?))
+            let (right_arrow_token, return_type, body) = if let Some(right_arrow_token) =
+                eat_token!(lexer, TokenKind::FatRightArrow)
+            {
+                eat_token!(lexer, TokenKind::Newline);
+                let expression = Box::new(parse_expression(lexer)?);
+                (
+                    right_arrow_token,
+                    None,
+                    FunctionBody::NakedDefintion(expression),
+                )
             } else {
-                FunctionBody::Type
+                let right_arrow_token = expect_token!(lexer, "->", TokenKind::RightArrow)?;
+                eat_token!(lexer, TokenKind::Newline);
+                let return_type = Box::new(parse_expression(lexer)?);
+
+                let body = if let Some(open_brace_token) = eat_token!(lexer, TokenKind::OpenBrace) {
+                    FunctionBody::Defintion(Box::new(parse_block(lexer, open_brace_token)?))
+                } else {
+                    FunctionBody::Type
+                };
+
+                (right_arrow_token, Some(return_type), body)
             };
 
             Expression {

@@ -273,7 +273,7 @@ fn resolve_expression(
             match body {
                 st::FunctionBody::Type => {}
 
-                st::FunctionBody::Defintion(_) => {
+                st::FunctionBody::Defintion(_) | st::FunctionBody::NakedDefintion(_) => {
                     names.retain(|_, name| match name {
                         ast::Name::Builtin(_) => true,
                         ast::Name::Const(_) => true,
@@ -328,18 +328,33 @@ fn resolve_expression(
                 })
                 .collect::<Result<Vec<_>, ResolvingError>>()?;
 
-            let return_type = Box::new(resolve_type_annotation(return_type, output, &names)?);
+            let return_type = return_type
+                .as_ref()
+                .map(|return_type| {
+                    Ok(Box::new(resolve_type_annotation(
+                        return_type,
+                        output,
+                        &names,
+                    )?))
+                })
+                .transpose()?;
 
             ast::Expression {
                 location: fn_token.location,
                 kind: match body {
-                    st::FunctionBody::Type => ast::ExpressionKind::FunctionType {
-                        inferred_parameters,
-                        parameters,
-                        return_type,
-                    },
+                    st::FunctionBody::Type => {
+                        let return_type = return_type.unwrap();
+
+                        ast::ExpressionKind::FunctionType {
+                            inferred_parameters,
+                            parameters,
+                            return_type,
+                        }
+                    }
 
                     st::FunctionBody::Defintion(body) => {
+                        let return_type = return_type.unwrap();
+
                         let body = {
                             let mut variables = SlotMap::with_key();
                             let body = resolve_expression(body, output, &names, &mut variables)?;
@@ -353,8 +368,29 @@ fn resolve_expression(
                             location: fn_token.location,
                             inferred_parameters,
                             parameters,
-                            return_type,
-                            body,
+                            body: ast::FunctionBody::Defintion { return_type, body },
+                        });
+
+                        ast::ExpressionKind::Function(id)
+                    }
+
+                    st::FunctionBody::NakedDefintion(body) => {
+                        assert!(return_type.is_none());
+
+                        let body = {
+                            let mut variables = SlotMap::with_key();
+                            let body = resolve_expression(body, output, &names, &mut variables)?;
+                            Box::new(ast::EvalContext {
+                                variables,
+                                expression: body,
+                            })
+                        };
+
+                        let id = output.functions.insert(ast::Function {
+                            location: fn_token.location,
+                            inferred_parameters,
+                            parameters,
+                            body: ast::FunctionBody::NakedDefintion { body },
                         });
 
                         ast::ExpressionKind::Function(id)
