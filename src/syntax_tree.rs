@@ -98,6 +98,12 @@ pub enum ExpressionKind {
         expression: Box<Expression>,
         close_parenthesis_token: Token,
     },
+    Constructor {
+        type_: Box<Expression>,
+        open_brace_token: Token,
+        members: Vec<ConstructorMember>,
+        close_brace_token: Token,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +119,14 @@ pub struct Member {
     pub name: InternedStr,
     pub colon_token: Token,
     pub type_: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstructorMember {
+    pub name_token: Token,
+    pub name: InternedStr,
+    pub colon_token: Token,
+    pub value: Expression,
 }
 
 #[derive(Debug, Clone)]

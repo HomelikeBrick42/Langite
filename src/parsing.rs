@@ -2,8 +2,9 @@ use crate::{
     interning::InternedStr,
     lexing::{Lexer, LexerErrorKind, LexingError, SourceLocation, Token, TokenKind},
     syntax_tree::{
-        DistinctKeys, Expression, ExpressionKind, FunctionBody, InferredParameters, Item, ItemKind,
-        MatchArm, Member, Parameter, Parameters, Statement, StatementKind,
+        ConstructorMember, DistinctKeys, Expression, ExpressionKind, FunctionBody,
+        InferredParameters, Item, ItemKind, MatchArm, Member, Parameter, Parameters, Statement,
+        StatementKind,
     },
 };
 use derive_more::Display;
@@ -87,14 +88,14 @@ pub fn parse_item(lexer: &mut Lexer<'_>) -> Result<Item, ParsingError> {
             let (colon_token, type_) =
                 if let Some(colon_token) = eat_token!(lexer, TokenKind::Colon) {
                     eat_token!(lexer, TokenKind::Newline);
-                    let type_ = Box::new(parse_expression(lexer)?);
+                    let type_ = Box::new(parse_expression(lexer, true)?);
                     (Some(colon_token), Some(type_))
                 } else {
                     (None, None)
                 };
             let equals_token = expect_token!(lexer, "=", TokenKind::Equals)?;
             eat_token!(lexer, TokenKind::Newline);
-            let value = Box::new(parse_expression(lexer)?);
+            let value = Box::new(parse_expression(lexer, true)?);
             Item {
                 location,
                 kind: ItemKind::Const {
@@ -126,7 +127,7 @@ pub fn parse_parameter(lexer: &mut Lexer<'_>) -> Result<Parameter, ParsingError>
     let (name_token, name) = expect_token!(lexer, "parameter name", TokenKind::Name(name), name)?;
     let colon_token = expect_token!(lexer, ":", TokenKind::Colon)?;
     eat_token!(lexer, TokenKind::Newline);
-    let type_ = parse_expression(lexer)?;
+    let type_ = parse_expression(lexer, true)?;
     Ok(Parameter {
         const_token,
         name_token,
@@ -212,12 +213,25 @@ pub fn parse_member(lexer: &mut Lexer<'_>) -> Result<Member, ParsingError> {
     let (name_token, name) = expect_token!(lexer, "member name", TokenKind::Name(name), name)?;
     let colon_token = expect_token!(lexer, ":", TokenKind::Colon)?;
     eat_token!(lexer, TokenKind::Newline);
-    let type_ = parse_expression(lexer)?;
+    let type_ = parse_expression(lexer, true)?;
     Ok(Member {
         name_token,
         name,
         colon_token,
         type_,
+    })
+}
+
+pub fn parse_constructor_member(lexer: &mut Lexer<'_>) -> Result<ConstructorMember, ParsingError> {
+    let (name_token, name) = expect_token!(lexer, "member name", TokenKind::Name(name), name)?;
+    let colon_token = expect_token!(lexer, ":", TokenKind::Colon)?;
+    eat_token!(lexer, TokenKind::Newline);
+    let value = parse_expression(lexer, true)?;
+    Ok(ConstructorMember {
+        name_token,
+        name,
+        colon_token,
+        value,
     })
 }
 
@@ -251,11 +265,17 @@ pub fn parse_members(lexer: &mut Lexer<'_>) -> Result<(Token, Vec<Member>, Token
     Ok((open_brace_token, members, close_brace_token))
 }
 
-pub fn parse_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
-    parse_binary_expression(lexer)
+pub fn parse_expression(
+    lexer: &mut Lexer<'_>,
+    open_brace_allowed: bool,
+) -> Result<Expression, ParsingError> {
+    parse_binary_expression(lexer, open_brace_allowed)
 }
 
-pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
+pub fn parse_primary_expression(
+    lexer: &mut Lexer<'_>,
+    open_brace_allowed: bool,
+) -> Result<Expression, ParsingError> {
     Ok(match lexer.next_token()? {
         struct_token @ Token {
             location,
@@ -310,29 +330,30 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
 
             eat_token!(lexer, TokenKind::Newline);
 
-            let (right_arrow_token, return_type, body) = if let Some(right_arrow_token) =
-                eat_token!(lexer, TokenKind::FatRightArrow)
-            {
-                eat_token!(lexer, TokenKind::Newline);
-                let expression = Box::new(parse_expression(lexer)?);
-                (
-                    right_arrow_token,
-                    None,
-                    FunctionBody::NakedDefintion(expression),
-                )
-            } else {
-                let right_arrow_token = expect_token!(lexer, "->", TokenKind::RightArrow)?;
-                eat_token!(lexer, TokenKind::Newline);
-                let return_type = Box::new(parse_expression(lexer)?);
-
-                let body = if let Some(open_brace_token) = eat_token!(lexer, TokenKind::OpenBrace) {
-                    FunctionBody::Defintion(Box::new(parse_block(lexer, open_brace_token)?))
+            let (right_arrow_token, return_type, body) =
+                if let Some(right_arrow_token) = eat_token!(lexer, TokenKind::FatRightArrow) {
+                    eat_token!(lexer, TokenKind::Newline);
+                    let expression = Box::new(parse_expression(lexer, open_brace_allowed)?);
+                    (
+                        right_arrow_token,
+                        None,
+                        FunctionBody::NakedDefintion(expression),
+                    )
                 } else {
-                    FunctionBody::Type
-                };
+                    let right_arrow_token = expect_token!(lexer, "->", TokenKind::RightArrow)?;
+                    eat_token!(lexer, TokenKind::Newline);
+                    let return_type = Box::new(parse_expression(lexer, false)?);
 
-                (right_arrow_token, Some(return_type), body)
-            };
+                    let body = if open_brace_allowed
+                        && let Some(open_brace_token) = eat_token!(lexer, TokenKind::OpenBrace)
+                    {
+                        FunctionBody::Defintion(Box::new(parse_block(lexer, open_brace_token)?))
+                    } else {
+                        FunctionBody::Type
+                    };
+
+                    (right_arrow_token, Some(return_type), body)
+                };
 
             Expression {
                 location,
@@ -352,7 +373,7 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
             kind: TokenKind::OpenParenthesis,
         } => {
             eat_token!(lexer, TokenKind::Newline);
-            let expression = Box::new(parse_expression(lexer)?);
+            let expression = Box::new(parse_expression(lexer, true)?);
             eat_token!(lexer, TokenKind::Newline);
             let close_parenthesis_token = expect_token!(lexer, ")", TokenKind::CloseParenthesis)?;
             Expression {
@@ -394,7 +415,7 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
             let (colon_token, type_) =
                 if let Some(colon_token) = eat_token!(lexer, TokenKind::Colon) {
                     eat_token!(lexer, TokenKind::Newline);
-                    let type_ = Box::new(parse_expression(lexer)?);
+                    let type_ = Box::new(parse_expression(lexer, open_brace_allowed)?);
                     (Some(colon_token), Some(type_))
                 } else {
                     (None, None)
@@ -415,7 +436,7 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
             location,
             kind: TokenKind::MatchKeyword,
         } => {
-            let condition = Box::new(parse_expression(lexer)?);
+            let condition = Box::new(parse_expression(lexer, false)?);
             let open_brace_token = expect_token!(lexer, "}", TokenKind::OpenBrace)?;
             let mut arms = vec![];
             loop {
@@ -473,7 +494,7 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
                     ) {
                         break;
                     }
-                    keys.push(parse_expression(lexer)?);
+                    keys.push(parse_expression(lexer, true)?);
                     if matches!(
                         lexer.peek_token(),
                         Ok(Token {
@@ -496,7 +517,7 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
                 None
             };
 
-            let expression = Box::new(parse_expression(lexer)?);
+            let expression = Box::new(parse_expression(lexer, open_brace_allowed)?);
 
             Expression {
                 location,
@@ -513,7 +534,7 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
             kind: TokenKind::TypeOfKeyword,
         } => {
             let open_parenthesis_token = expect_token!(lexer, "(", TokenKind::OpenParenthesis)?;
-            let expression = Box::new(parse_expression(lexer)?);
+            let expression = Box::new(parse_expression(lexer, true)?);
             let close_parenthesis_token = expect_token!(lexer, ")", TokenKind::CloseParenthesis)?;
             Expression {
                 location,
@@ -538,10 +559,12 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
     })
 }
 
-pub fn parse_binary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, ParsingError> {
-    let mut left = parse_primary_expression(lexer)?;
+pub fn parse_binary_expression(
+    lexer: &mut Lexer<'_>,
+    open_brace_allowed: bool,
+) -> Result<Expression, ParsingError> {
+    let mut left = parse_primary_expression(lexer, open_brace_allowed)?;
 
-    #[expect(clippy::while_let_loop)]
     loop {
         if let Some(open_parenthesis_token) = eat_token!(lexer, TokenKind::OpenParenthesis) {
             let mut arguments = vec![];
@@ -556,7 +579,7 @@ pub fn parse_binary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Pars
                 ) {
                     break;
                 }
-                arguments.push(parse_expression(lexer)?);
+                arguments.push(parse_expression(lexer, true)?);
                 if matches!(
                     lexer.peek_token(),
                     Ok(Token {
@@ -578,6 +601,43 @@ pub fn parse_binary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Pars
                     close_parenthesis_token,
                 },
             };
+        } else if open_brace_allowed
+            && let Some(open_brace_token) = eat_token!(lexer, TokenKind::OpenBrace)
+        {
+            let mut members = vec![];
+            loop {
+                while eat_token!(lexer, TokenKind::Newline).is_some() {}
+                if matches!(
+                    lexer.peek_token(),
+                    Ok(Token {
+                        kind: TokenKind::CloseBrace,
+                        ..
+                    })
+                ) {
+                    break;
+                }
+                members.push(parse_constructor_member(lexer)?);
+                if matches!(
+                    lexer.peek_token(),
+                    Ok(Token {
+                        kind: TokenKind::CloseBrace,
+                        ..
+                    })
+                ) {
+                    break;
+                }
+                expect_token!(lexer, ",", TokenKind::Comma)?;
+            }
+            let close_brace_token = expect_token!(lexer, "}", TokenKind::CloseBrace)?;
+            left = Expression {
+                location: open_brace_token.location,
+                kind: ExpressionKind::Constructor {
+                    type_: Box::new(left),
+                    open_brace_token,
+                    members,
+                    close_brace_token,
+                },
+            };
         } else {
             break;
         }
@@ -587,11 +647,11 @@ pub fn parse_binary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Pars
 }
 
 pub fn parse_match_arm(lexer: &mut Lexer<'_>) -> Result<MatchArm, ParsingError> {
-    let pattern = parse_expression(lexer)?;
+    let pattern = parse_expression(lexer, true)?;
     eat_token!(lexer, TokenKind::Newline);
     let fat_right_arrow_token = expect_token!(lexer, "=>", TokenKind::FatRightArrow)?;
     eat_token!(lexer, TokenKind::Newline);
-    let value = parse_expression(lexer)?;
+    let value = parse_expression(lexer, true)?;
     Ok(MatchArm {
         pattern,
         fat_right_arrow_token,
@@ -649,10 +709,10 @@ pub fn parse_statement(lexer: &mut Lexer<'_>) -> Result<Statement, ParsingError>
         }
 
         _ => {
-            let expression = Box::new(parse_expression(lexer)?);
+            let expression = Box::new(parse_expression(lexer, true)?);
             if let Some(equals_token) = eat_token!(lexer, TokenKind::Equals) {
                 eat_token!(lexer, TokenKind::Newline);
-                let value = Box::new(parse_expression(lexer)?);
+                let value = Box::new(parse_expression(lexer, true)?);
                 Statement {
                     location: equals_token.location,
                     kind: StatementKind::Assignment {

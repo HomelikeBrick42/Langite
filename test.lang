@@ -20,3 +20,7 @@ const foo = fn(T: Type) => {
 const bar = fn(const T: Type, const U: Type, f: fn(x: T) -> U, x: T) -> U {
     f(x)
 }
+
+const main = fn() -> Unit {
+    Unit {}
+}

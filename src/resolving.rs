@@ -1,6 +1,6 @@
 use crate::{ast, interning::InternedStr, lexing::SourceLocation, syntax_tree as st};
 use derive_more::Display;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use slotmap::SlotMap;
 use thiserror::Error;
 
@@ -17,8 +17,6 @@ pub enum ResolvingErrorKind {
     UnknownName(InternedStr),
     #[display("Cannot redeclare name '{_0}'")]
     NameRedeclaration(InternedStr),
-    #[display("Cannot redeclare member '{_0}'")]
-    MemberRedeclaration(InternedStr),
     #[display("Cannot use let pattern in an expression")]
     LetInExpression,
     #[display("Cannot use discard pattern in an expression")]
@@ -197,23 +195,10 @@ fn resolve_expression(
                 ast::Name::Variable(_) => false,
             });
 
-            let members = {
-                let mut member_names = FxHashSet::default();
-                members
-                    .iter()
-                    .map(|member| {
-                        let member = resolve_member(member, output, &names)?;
-                        if member_names.contains(&member.name) {
-                            return Err(ResolvingError {
-                                location: member.location,
-                                kind: ResolvingErrorKind::MemberRedeclaration(member.name),
-                            });
-                        }
-                        member_names.insert(member.name);
-                        Ok(member)
-                    })
-                    .collect::<Result<Vec<_>, ResolvingError>>()?
-            };
+            let members = members
+                .iter()
+                .map(|member| resolve_member(member, output, &names))
+                .collect::<Result<Vec<_>, ResolvingError>>()?;
 
             ast::Expression {
                 location: struct_token.location,
@@ -236,23 +221,10 @@ fn resolve_expression(
                 ast::Name::Variable(_) => false,
             });
 
-            let members = {
-                let mut member_names = FxHashSet::default();
-                members
-                    .iter()
-                    .map(|member| {
-                        let member = resolve_member(member, output, &names)?;
-                        if member_names.contains(&member.name) {
-                            return Err(ResolvingError {
-                                location: member.location,
-                                kind: ResolvingErrorKind::MemberRedeclaration(member.name),
-                            });
-                        }
-                        member_names.insert(member.name);
-                        Ok(member)
-                    })
-                    .collect::<Result<Vec<_>, ResolvingError>>()?
-            };
+            let members = members
+                .iter()
+                .map(|member| resolve_member(member, output, &names))
+                .collect::<Result<Vec<_>, ResolvingError>>()?;
 
             ast::Expression {
                 location: enum_token.location,
@@ -560,6 +532,30 @@ fn resolve_expression(
                 kind: ast::ExpressionKind::TypeOf { expression },
             }
         }
+
+        st::ExpressionKind::Constructor {
+            type_,
+            open_brace_token,
+            members,
+            close_brace_token: _,
+        } => {
+            let type_ = Box::new(resolve_type_annotation(type_, output, names)?);
+            let members = members
+                .iter()
+                .map(|member| {
+                    let value = resolve_expression(&member.value, output, names, variables)?;
+                    Ok(ast::ConstructorMember {
+                        location: member.colon_token.location,
+                        name: member.name,
+                        value,
+                    })
+                })
+                .collect::<Result<Vec<_>, ResolvingError>>()?;
+            ast::Expression {
+                location: open_brace_token.location,
+                kind: ast::ExpressionKind::Constructor { type_, members },
+            }
+        }
     })
 }
 
@@ -715,6 +711,30 @@ fn resolve_pattern(
             ast::Pattern {
                 location: name_token.location,
                 kind: ast::PatternKind::Let(variable_id),
+            }
+        }
+
+        st::ExpressionKind::Constructor {
+            type_,
+            open_brace_token,
+            members,
+            close_brace_token: _,
+        } => {
+            let type_ = Box::new(resolve_type_annotation(type_, output, names)?);
+            let members = members
+                .iter()
+                .map(|member| {
+                    let pattern = resolve_pattern(&member.value, output, names, variables)?;
+                    Ok(ast::DestructorMember {
+                        location: member.colon_token.location,
+                        name: member.name,
+                        pattern,
+                    })
+                })
+                .collect::<Result<Vec<_>, ResolvingError>>()?;
+            ast::Pattern {
+                location: open_brace_token.location,
+                kind: ast::PatternKind::Destructor { type_, members },
             }
         }
 

@@ -93,6 +93,10 @@ pub enum ExpressionKind {
     TypeOf {
         expression: Box<EvalContext>,
     },
+    Constructor {
+        type_: Box<EvalContext>,
+        members: Vec<ConstructorMember>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +104,13 @@ pub struct Member {
     pub location: SourceLocation,
     pub name: InternedStr,
     pub type_: Box<EvalContext>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstructorMember {
+    pub location: SourceLocation,
+    pub name: InternedStr,
+    pub value: Expression,
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +165,17 @@ pub enum PatternKind {
     Name(Name),
     Discard,
     Let(VariableId),
+    Destructor {
+        type_: Box<EvalContext>,
+        members: Vec<DestructorMember>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct DestructorMember {
+    pub location: SourceLocation,
+    pub name: InternedStr,
+    pub pattern: Pattern,
 }
 
 #[derive(Debug, Clone)]
