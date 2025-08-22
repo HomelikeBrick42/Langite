@@ -44,6 +44,8 @@ pub enum TokenKind {
     Comma,
     #[display("=")]
     Equals,
+    #[display("==")]
+    EqualsEquals,
     #[display("=>")]
     FatRightArrow,
     #[display("+")]
@@ -73,6 +75,10 @@ pub enum TokenKind {
     MatchKeyword,
     #[display("const keyword")]
     ConstKeyword,
+    #[display("distinct keyword")]
+    DistinctKeyword,
+    #[display("type_of keyword")]
+    TypeOfKeyword,
 }
 
 #[derive(Debug, Clone)]
@@ -169,14 +175,19 @@ impl<'source> Lexer<'source> {
 
                     ':' => TokenKind::Colon,
                     ',' => TokenKind::Comma,
-                    '=' => {
-                        if let Some('>') = self.peek_char() {
+                    '=' => match self.peek_char() {
+                        Some('=') => {
+                            self.next_char();
+                            TokenKind::EqualsEquals
+                        }
+
+                        Some('>') => {
                             self.next_char();
                             TokenKind::FatRightArrow
-                        } else {
-                            TokenKind::Equals
                         }
-                    }
+
+                        _ => TokenKind::Equals,
+                    },
                     '+' => TokenKind::Plus,
                     '-' => {
                         if let Some('>') = self.peek_char() {
@@ -244,6 +255,8 @@ impl<'source> Lexer<'source> {
                             "let" => TokenKind::LetKeyword,
                             "match" => TokenKind::MatchKeyword,
                             "const" => TokenKind::ConstKeyword,
+                            "distinct" => TokenKind::DistinctKeyword,
+                            "type_of" => TokenKind::TypeOfKeyword,
                             name => TokenKind::Name(name.into()),
                         }
                     }

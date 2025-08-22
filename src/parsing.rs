@@ -2,8 +2,8 @@ use crate::{
     interning::InternedStr,
     lexing::{Lexer, LexerErrorKind, LexingError, SourceLocation, Token, TokenKind},
     syntax_tree::{
-        Expression, ExpressionKind, FunctionBody, InferredParameters, Item, ItemKind, MatchArm,
-        Member, Parameter, Parameters, Statement, StatementKind,
+        DistinctKeys, Expression, ExpressionKind, FunctionBody, InferredParameters, Item, ItemKind,
+        MatchArm, Member, Parameter, Parameters, Statement, StatementKind,
     },
 };
 use derive_more::Display;
@@ -435,6 +435,78 @@ pub fn parse_primary_expression(lexer: &mut Lexer<'_>) -> Result<Expression, Par
                     open_brace_token,
                     arms,
                     close_brace_token,
+                },
+            }
+        }
+
+        distinct_token @ Token {
+            location,
+            kind: TokenKind::DistinctKeyword,
+        } => {
+            let keys = if let Some(open_parenthesis_token) =
+                eat_token!(lexer, TokenKind::OpenParenthesis)
+            {
+                let mut keys = vec![];
+                loop {
+                    while eat_token!(lexer, TokenKind::Newline).is_some() {}
+                    if matches!(
+                        lexer.peek_token(),
+                        Ok(Token {
+                            kind: TokenKind::CloseParenthesis,
+                            ..
+                        })
+                    ) {
+                        break;
+                    }
+                    keys.push(parse_expression(lexer)?);
+                    if matches!(
+                        lexer.peek_token(),
+                        Ok(Token {
+                            kind: TokenKind::CloseParenthesis,
+                            ..
+                        })
+                    ) {
+                        break;
+                    }
+                    expect_token!(lexer, ",", TokenKind::Comma)?;
+                }
+                let close_parenthesis_token =
+                    expect_token!(lexer, ")", TokenKind::CloseParenthesis)?;
+                Some(DistinctKeys {
+                    open_parenthesis_token,
+                    keys,
+                    close_parenthesis_token,
+                })
+            } else {
+                None
+            };
+
+            let expression = Box::new(parse_expression(lexer)?);
+
+            Expression {
+                location,
+                kind: ExpressionKind::Distinct {
+                    distinct_token,
+                    keys,
+                    expression,
+                },
+            }
+        }
+
+        type_of_token @ Token {
+            location,
+            kind: TokenKind::TypeOfKeyword,
+        } => {
+            let open_parenthesis_token = expect_token!(lexer, "(", TokenKind::OpenParenthesis)?;
+            let expression = Box::new(parse_expression(lexer)?);
+            let close_parenthesis_token = expect_token!(lexer, ")", TokenKind::CloseParenthesis)?;
+            Expression {
+                location,
+                kind: ExpressionKind::TypeOf {
+                    type_of_token,
+                    open_parenthesis_token,
+                    expression,
+                    close_parenthesis_token,
                 },
             }
         }

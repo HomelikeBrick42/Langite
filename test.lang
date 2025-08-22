@@ -1,12 +1,12 @@
-const True: Type = struct {}
-const False = struct {}
-const Bool = enum {
-    true: True,
-    false: False,
+const Bool = distinct enum {
+    true: distinct struct {},
+    false: distinct struct {},
 }
 
-const Foo = struct {}
-const Bar = struct {}
+const Foo = distinct struct {}
+const Bar = distinct struct {
+    a: type_of(Foo), // should be `Type`
+}
 
 // type annotation is optional
 const foo: fn(T: Type) -> Type = fn(T: Type) -> Type {

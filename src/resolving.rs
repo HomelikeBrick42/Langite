@@ -102,7 +102,8 @@ fn resolve_items<'a>(
         });
 
         if let Some(type_) = type_ {
-            output.consts[const_id].type_ = Some(resolve_type_annotation(type_, output, &names)?);
+            output.consts[const_id].type_ =
+                Some(Box::new(resolve_type_annotation(type_, output, &names)?));
         }
         {
             let mut variables = SlotMap::with_key();
@@ -121,7 +122,7 @@ fn resolve_type_annotation(
     type_: &st::Expression,
     output: &mut ResolvingOutput,
     names: &FxHashMap<InternedStr, ast::Name>,
-) -> Result<Box<ast::EvalContext>, ResolvingError> {
+) -> Result<ast::EvalContext, ResolvingError> {
     let mut names = names.clone();
     names.retain(|_, name| match name {
         ast::Name::Builtin(_) => true,
@@ -132,10 +133,10 @@ fn resolve_type_annotation(
     });
     let mut variables = SlotMap::with_key();
     let type_ = resolve_expression(type_, output, &names, &mut variables)?;
-    Ok(Box::new(ast::EvalContext {
+    Ok(ast::EvalContext {
         variables,
         expression: type_,
-    }))
+    })
 }
 
 fn resolve_parameter(
@@ -153,7 +154,7 @@ fn resolve_parameter(
         location: name_token.location,
         const_: const_token.is_some(),
         name: *name,
-        type_: resolve_type_annotation(type_, output, names)?,
+        type_: Box::new(resolve_type_annotation(type_, output, names)?),
     })
 }
 
@@ -170,7 +171,7 @@ fn resolve_member(
     Ok(ast::Member {
         location: name_token.location,
         name: *name,
-        type_: resolve_type_annotation(type_, output, names)?,
+        type_: Box::new(resolve_type_annotation(type_, output, names)?),
     })
 }
 
@@ -327,7 +328,7 @@ fn resolve_expression(
                 })
                 .collect::<Result<Vec<_>, ResolvingError>>()?;
 
-            let return_type = resolve_type_annotation(return_type, output, &names)?;
+            let return_type = Box::new(resolve_type_annotation(return_type, output, &names)?);
 
             ast::Expression {
                 location: fn_token.location,
@@ -490,6 +491,39 @@ fn resolve_expression(
                 kind: ast::ExpressionKind::Call { operand, arguments },
             }
         }
+
+        st::ExpressionKind::Distinct {
+            distinct_token,
+            keys,
+            expression,
+        } => {
+            let keys = if let Some(keys) = keys {
+                keys.keys
+                    .iter()
+                    .map(|key| resolve_type_annotation(key, output, names))
+                    .collect::<Result<Vec<_>, ResolvingError>>()?
+            } else {
+                vec![]
+            };
+            let expression = Box::new(resolve_type_annotation(expression, output, names)?);
+            ast::Expression {
+                location: distinct_token.location,
+                kind: ast::ExpressionKind::Distinct { keys, expression },
+            }
+        }
+
+        st::ExpressionKind::TypeOf {
+            type_of_token,
+            open_parenthesis_token: _,
+            expression,
+            close_parenthesis_token: _,
+        } => {
+            let expression = Box::new(resolve_type_annotation(expression, output, names)?);
+            ast::Expression {
+                location: type_of_token.location,
+                kind: ast::ExpressionKind::TypeOf { expression },
+            }
+        }
     })
 }
 
@@ -634,7 +668,7 @@ fn resolve_pattern(
         } => {
             let type_ = type_
                 .as_ref()
-                .map(|type_| resolve_type_annotation(type_, output, names))
+                .map(|type_| Ok(Box::new(resolve_type_annotation(type_, output, names)?)))
                 .transpose()?;
             let variable_id = variables.insert(ast::Variable {
                 location: name_token.location,

@@ -87,6 +87,24 @@ pub enum ExpressionKind {
         arguments: Vec<Expression>,
         close_parenthesis_token: Token,
     },
+    Distinct {
+        distinct_token: Token,
+        keys: Option<DistinctKeys>,
+        expression: Box<Expression>,
+    },
+    TypeOf {
+        type_of_token: Token,
+        open_parenthesis_token: Token,
+        expression: Box<Expression>,
+        close_parenthesis_token: Token,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct DistinctKeys {
+    pub open_parenthesis_token: Token,
+    pub keys: Vec<Expression>,
+    pub close_parenthesis_token: Token,
 }
 
 #[derive(Debug, Clone)]

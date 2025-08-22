@@ -76,6 +76,13 @@ pub enum ExpressionKind {
         operand: Box<Expression>,
         arguments: Vec<Expression>,
     },
+    Distinct {
+        keys: Vec<EvalContext>,
+        expression: Box<EvalContext>,
+    },
+    TypeOf {
+        expression: Box<EvalContext>,
+    },
 }
 
 #[derive(Debug, Clone)]
