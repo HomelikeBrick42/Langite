@@ -97,6 +97,8 @@ pub enum ExpressionKind {
         type_: Box<EvalContext>,
         members: Vec<ConstructorMember>,
     },
+    TypeBuiltin,
+    IOBuiltin,
 }
 
 #[derive(Debug, Clone)]
@@ -179,13 +181,7 @@ pub struct DestructorMember {
 }
 
 #[derive(Debug, Clone)]
-pub enum Builtin {
-    Type,
-}
-
-#[derive(Debug, Clone)]
 pub enum Name {
-    Builtin(Builtin),
     Const(ConstId),
     ImplicitParameter { index: usize },
     Parameter { index: usize },

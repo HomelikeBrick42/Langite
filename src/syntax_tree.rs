@@ -104,6 +104,11 @@ pub enum ExpressionKind {
         members: Vec<ConstructorMember>,
         close_brace_token: Token,
     },
+    Builtin {
+        builtin_token: Token,
+        string_token: Token,
+        string: InternedStr,
+    },
 }
 
 #[derive(Debug, Clone)]

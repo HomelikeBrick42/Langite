@@ -547,6 +547,22 @@ pub fn parse_primary_expression(
             }
         }
 
+        builtin_token @ Token {
+            location,
+            kind: TokenKind::BuiltinDirective,
+        } => {
+            let (string_token, string) =
+                expect_token!(lexer, "string literal", TokenKind::String(string), string)?;
+            Expression {
+                location,
+                kind: ExpressionKind::Builtin {
+                    builtin_token,
+                    string_token,
+                    string,
+                },
+            }
+        }
+
         token => {
             return Err(ParsingError {
                 location: token.location,

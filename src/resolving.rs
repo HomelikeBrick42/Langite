@@ -27,6 +27,8 @@ pub enum ResolvingErrorKind {
     ExpectedExpression,
     #[display("Expected a pattern")]
     ExpectedPattern,
+    #[display("Unknown #builtin {_0:?}")]
+    UnknownBuiltin(InternedStr),
 }
 
 pub struct ResolvingOutput {
@@ -42,8 +44,6 @@ pub fn resolve_program(
         functions: SlotMap::with_key(),
     };
     let mut names = FxHashMap::<InternedStr, ast::Name>::default();
-
-    names.insert("Type".into(), ast::Name::Builtin(ast::Builtin::Type));
 
     resolve_items(items.iter(), &mut output, &mut names)?;
 
@@ -92,7 +92,6 @@ fn resolve_items<'a>(
     for (const_id, type_, value) in consts {
         let mut names = names.clone();
         names.retain(|_, name| match name {
-            ast::Name::Builtin(_) => true,
             ast::Name::Const(_) => true,
             ast::Name::ImplicitParameter { index: _ } => false,
             ast::Name::Parameter { index: _ } => false,
@@ -123,7 +122,6 @@ fn resolve_type_annotation(
 ) -> Result<ast::EvalContext, ResolvingError> {
     let mut names = names.clone();
     names.retain(|_, name| match name {
-        ast::Name::Builtin(_) => true,
         ast::Name::Const(_) => true,
         ast::Name::ImplicitParameter { index: _ } => true,
         ast::Name::Parameter { index: _ } => true,
@@ -188,7 +186,6 @@ fn resolve_expression(
         } => {
             let mut names = names.clone();
             names.retain(|_, name| match name {
-                ast::Name::Builtin(_) => true,
                 ast::Name::Const(_) => true,
                 ast::Name::ImplicitParameter { index: _ } => true,
                 ast::Name::Parameter { index: _ } => true,
@@ -214,7 +211,6 @@ fn resolve_expression(
         } => {
             let mut names = names.clone();
             names.retain(|_, name| match name {
-                ast::Name::Builtin(_) => true,
                 ast::Name::Const(_) => true,
                 ast::Name::ImplicitParameter { index: _ } => true,
                 ast::Name::Parameter { index: _ } => true,
@@ -247,7 +243,6 @@ fn resolve_expression(
 
                 st::FunctionBody::Defintion(_) | st::FunctionBody::NakedDefintion(_) => {
                     names.retain(|_, name| match name {
-                        ast::Name::Builtin(_) => true,
                         ast::Name::Const(_) => true,
                         ast::Name::ImplicitParameter { index: _ } => false,
                         ast::Name::Parameter { index: _ } => false,
@@ -556,6 +551,24 @@ fn resolve_expression(
                 kind: ast::ExpressionKind::Constructor { type_, members },
             }
         }
+
+        st::ExpressionKind::Builtin {
+            builtin_token,
+            string_token,
+            string,
+        } => ast::Expression {
+            location: builtin_token.location,
+            kind: match string.as_str() {
+                "Type" => ast::ExpressionKind::TypeBuiltin,
+                "IO" => ast::ExpressionKind::IOBuiltin,
+                _ => {
+                    return Err(ResolvingError {
+                        location: string_token.location,
+                        kind: ResolvingErrorKind::UnknownBuiltin(*string),
+                    });
+                }
+            },
+        },
     })
 }
 

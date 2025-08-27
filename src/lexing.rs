@@ -3,7 +3,7 @@ use derive_more::{Debug, Display};
 use std::num::NonZeroUsize;
 use thiserror::Error;
 
-#[derive(Debug, Display, Clone, Copy)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
 #[debug("{filepath}:{line}:{column} at byte {position}")]
 #[display("{filepath}:{line}:{column}")]
 pub struct SourceLocation {
@@ -79,6 +79,12 @@ pub enum TokenKind {
     DistinctKeyword,
     #[display("type_of keyword")]
     TypeOfKeyword,
+
+    #[display("{_0:?}")]
+    String(InternedStr),
+
+    #[display("#builtin")]
+    BuiltinDirective,
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +108,12 @@ pub enum LexerErrorKind {
     UnexpectedChar(char),
     #[display("Unclosed multiline comment")]
     UnclosedMultilineComment,
+    #[display("Unknown directive '{_0}'")]
+    UnknownDirective(InternedStr),
+    #[display("Unknown escape '\\{_0}'")]
+    UnknownEscape(char),
+    #[display("Unclosed string")]
+    UnclosedString,
 }
 
 impl<'source> Lexer<'source> {
@@ -258,6 +270,58 @@ impl<'source> Lexer<'source> {
                             "distinct" => TokenKind::DistinctKeyword,
                             "type_of" => TokenKind::TypeOfKeyword,
                             name => TokenKind::Name(name.into()),
+                        }
+                    }
+
+                    '"' => {
+                        let mut string = String::new();
+                        loop {
+                            match self.next_char().ok_or(LexingError {
+                                location: start_location,
+                                kind: LexerErrorKind::UnclosedString,
+                            })? {
+                                '"' => break,
+
+                                '\\' => {
+                                    let escape_location = self.location;
+                                    match self.next_char().ok_or(LexingError {
+                                        location: start_location,
+                                        kind: LexerErrorKind::UnclosedString,
+                                    })? {
+                                        '\\' => string.push('\\'),
+                                        '"' => string.push('"'),
+                                        '0' => string.push('\0'),
+                                        'n' => string.push('\n'),
+                                        't' => string.push('\t'),
+                                        'r' => string.push('\r'),
+                                        c => {
+                                            return Err(LexingError {
+                                                location: escape_location,
+                                                kind: LexerErrorKind::UnknownEscape(c),
+                                            });
+                                        }
+                                    }
+                                }
+
+                                c => string.push(c),
+                            }
+                        }
+                        TokenKind::String(string.as_str().into())
+                    }
+
+                    '#' => {
+                        while let Some('A'..='Z' | 'a'..='z' | '0'..='9' | '_') = self.peek_char() {
+                            self.next_char();
+                        }
+
+                        match &self.source[start_location.position..self.location.position] {
+                            "#builtin" => TokenKind::BuiltinDirective,
+                            name => {
+                                return Err(LexingError {
+                                    location: start_location,
+                                    kind: LexerErrorKind::UnknownDirective(name.into()),
+                                });
+                            }
                         }
                     }
 

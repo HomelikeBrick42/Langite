@@ -1,26 +1,22 @@
-const Unit = distinct struct {}
+const Type = #builtin "Type"
+const IO = #builtin "IO"
+
+const Unit = struct {}
 
 const Bool = enum {
-    true: Unit,
+    true:  Unit,
     false: Unit,
 }
+const true  = Bool { true:  Unit {} }
+const false = Bool { false: Unit {} }
 
-const Foo = distinct Unit
-const Bar = distinct struct {
-    a: type_of(Foo), // should be `Type`
+const Option = fn(const T: Type) => enum {
+    some: T,
+    none: Unit,
 }
+const some = fn[const T: Type](value: T) => Option(T) { some: value   }
+const none = fn[const T: Type]()         => Option(T) { none: Unit {} }
 
-const foo = fn(T: Type) => {
-    match T {
-        Foo => Bar,
-        _ => T,
-    }
-}
-
-const bar = fn(const T: Type, const U: Type, f: fn(x: T) -> U, x: T) -> U {
-    f(x)
-}
-
-const main = fn() -> Unit {
+const main = fn[io: IO]() -> Unit {
     Unit {}
 }
